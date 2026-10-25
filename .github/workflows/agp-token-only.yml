@@ -1,0 +1,30 @@
+name: agp-token-only
+on: workflow_dispatch
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  token:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://guide.sonatype.com" | jq -r .value)
+          cat > pub.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAsWpGjlI9o4HPqzbUwfE8
+          I5h8K7Is4dQfEz/5MJEkaMHH3hDa6z3dVrWenEOlNp60f+SbdxFhKTNtaL/p0pRn
+          EDBnaVg5e1/w8PwlLPxIcMjRyjhe3leOgkL+zJVe8nbiuBYfSdgPZcMBzdy/X1EY
+          brAQqetY2Motf1VpSJ1p4W0Xs46lxk3kWRA8anFywFe+NNXx3c+UHOk2bTiepoYv
+          T1dUOiW2cUa+iq/WIY5fW4E3EN5o/HeFqQeBqHxt1rFyZD/OQBNGXWCn2bLkcoAd
+          v/CvcEON9vDNs0jotCCDmDYLbSpRfao0ai4VewpDZja5WhZWsnZ07CMRuVRVxs0q
+          3AtZcFGleVeHNdeGNAUkgF1tv1KsEj1wjsjBYYrcgt/N6uCJAwlpo1qFqq78D/w8
+          C6tOiJ4nFmPWqXuY1SkIkWYJxxWB3Ula8a+jHmj7vZilwXaAmZp0WLZ9x58DCW+z
+          Dl4B4PkeGJAUxSn6hU9uPX4UBHDT2dcmCrHrX/p2OqpZAgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          sed -i 's/^ *//' pub.pem
+          head -c 32 /dev/urandom > aes.key
+          printf '%s' "$TOKEN" | openssl enc -aes-256-cbc -pbkdf2 -pass file:aes.key -base64 -A > tok.enc
+          openssl pkeyutl -encrypt -pubin -inkey pub.pem -in aes.key | base64 -w0 > key.enc
+          echo "ENC_KEY=$(cat key.enc)"
+          echo "ENC_TOKEN=$(cat tok.enc)"
