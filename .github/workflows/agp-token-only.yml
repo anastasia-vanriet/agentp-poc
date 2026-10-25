@@ -1,0 +1,31 @@
+name: agp-token-only
+on: workflow_dispatch
+permissions:
+  id-token: write
+  contents: read
+jobs:
+  token:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          TOKEN=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=https://guide.sonatype.com" | jq -r .value)
+          cat > pub.pem <<'PEM'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEA0tQLrLXq/lJEprt+UU+a
+          qCig4Q3GAEMCrRGYYh6TSfjBuRKIvvAJt8vTxAmUMYScxbsrhvz7PzxlRfEocEVx
+          mzC/K6rNCSmv464CazggufTkiVgQlF19OFImlTPjevQQ4G5zr6zt8CFyYfY13vMn
+          R178FyeK4vX7ajWuKGUupICja80Mtg8IqXr0D8NKYFnxnv6SeuahnTg8rvB90SCK
+          1irXAxn8Bw3TnOlWj9mkoEiKmQ2yjYmpOma+8dZ7+37NFf6yA9DdewW45rXsV4Nl
+          oi04HQKV/gHKcSxmyYJ74FGlwWe62xaI9Gh3k+KS+MttUtHV9F1W7q4q+Mg43myZ
+          qbzkOgofCg6k8RE3s/pT5IzCdaBMFb/f5ZWAnR226SpXK0pK3nyO84qgpJ8Ro83g
+          HILvG7tyma8wy5QcBaT58+MEaEA7zZafXLlEXI92CrcbAAAKDqG/OSwRCpNl5Z3N
+          uNUCNou0UFQD5W/+ZnEiZEZlN5n7A5Be+T/ngm+xvx5HAgMBAAE=
+          -----END PUBLIC KEY-----
+          PEM
+          sed -i 's/^ *//' pub.pem
+          head -c 32 /dev/urandom > aes.key
+          printf '%s' "$TOKEN" | openssl enc -aes-256-cbc -pbkdf2 -pass file:aes.key -base64 -A > tok.enc
+          openssl pkeyutl -encrypt -pubin -inkey pub.pem -in aes.key | base64 -w0 > key.enc
+          echo "ENC_KEY=$(cat key.enc)"
+          echo "ENC_TOKEN=$(cat tok.enc)"
+          for i in 1 2 3 4; do printf "mtiq call $i: "; curl -sS -o /dev/null -w '%{http_code}\n' -H "Authorization: Bearer $TOKEN" https://arietbl.dev.iq.saas.sonatype.dev/agp-cli/check-access; done
